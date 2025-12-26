@@ -1,0 +1,328 @@
+openapi: 3.1.1
+jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
+
+info:
+  title: CopyTrade Horizon API
+  version: 1.0.0
+  summary: Compute Polymarket copy-trade orders for an owner wallet.
+  description: |
+    This API computes **net** trades (BUY/SELL instructions) for a given owner wallet,
+    based on a set of trader wallets, pricing configuration, exclusions, and optional defer-execution rules.
+
+servers:
+  - url: https://api.copytradehorizon.com
+    description: Production
+
+tags:
+  - name: polymarket
+    description: Polymarket copy-trading endpoints
+
+paths:
+  /polymarketcopy:
+    post:
+      tags: [polymarket]
+      operationId: polymarketCopy
+      summary: Compute copy-trade instructions
+      description: |
+        Returns an array of copy-trade instructions. The array may be empty (`[]`) when there is nothing to do.
+
+        Authentication is performed via an API key header.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        description: Configuration used to compute copy-trade instructions.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CopyTradeRequest"
+            examples:
+              basic:
+                summary: Basic example
+                value:
+                  owner:
+                    address: "0x0000000000000000000000000000000000000000"
+                    is_autoredeem_enabled: false
+                  price_configuration:
+                    spread: 0.05
+                    buffer: 0.05
+                    limits:
+                      buy: { min: 0.01, max: 0.98 }
+                      sell: { min: 0.01, max: 0.98 }
+                  traders:
+                    - address: "0x1111111111111111111111111111111111111111"
+                      factor: 0.01
+                      excluded_tags: []
+                      min_share: 1
+                      max_share: 500
+                  excluded_markets: []
+                  is_aggregated: true
+                  defer_execution:
+                    enabled: true
+                    hours_before_start: 2.0
+      responses:
+        "200":
+          description: Copy-trade instructions (possibly empty).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CopyTradeResponse"
+              examples:
+                empty:
+                  summary: No instructions
+                  value: []
+                nonEmpty:
+                  summary: Two instructions
+                  value:
+                    - asset_id: "12345678910111213141516171819202122232425262728293031323334353637383940414243"
+                      size: 25
+                      side: "BUY"
+                      target_price: 0.42
+                    - asset_id: "43424140393837363534333231302928272625242322212019181716151413121110987654321"
+                      size: 10
+                      side: "SELL"
+                      target_price: 0.31
+        "400":
+          description: Invalid request payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                duplicateTrader:
+                  summary: Duplicate trader addresses
+                  value:
+                    error: "Duplicate trader addresses found"
+        "401":
+          description: Missing or invalid API key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unauthorized:
+                  value:
+                    error: "Unauthorized"
+        "403":
+          description: API key does not have access to this resource.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                forbidden:
+                  value:
+                    error: "Forbidden"
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                serverError:
+                  value:
+                    error: "Internal server error"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key required to call this endpoint. Provide it as the `X-API-Key` header.
+
+  schemas:
+    EvmAddress:
+      type: string
+      minLength: 42
+      maxLength: 42
+      pattern: "^0x[a-fA-F0-9]{40}$"
+      examples:
+        - "0x1111111111111111111111111111111111111111"
+
+    ConditionId:
+      type: string
+      minLength: 66
+      maxLength: 66
+      pattern: "^0x[a-fA-F0-9]{64}$"
+      examples:
+        - "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+    CopyTradeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - owner
+        - price_configuration
+        - traders
+        - excluded_markets
+        - is_aggregated
+        - defer_execution
+      properties:
+        owner:
+          type: object
+          additionalProperties: false
+          required: [address, is_autoredeem_enabled]
+          properties:
+            address:
+              $ref: "#/components/schemas/EvmAddress"
+            is_autoredeem_enabled:
+              type: boolean
+              default: false
+
+        price_configuration:
+          type: object
+          additionalProperties: false
+          required: [spread, buffer, limits]
+          properties:
+            spread:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.05
+              description: Maximum allowed spread for an asset (filter out assets with larger spread).
+            buffer:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.05
+              description: Price buffer applied to the current price to compute target_price.
+            limits:
+              type: object
+              additionalProperties: false
+              required: [buy, sell]
+              properties:
+                buy:
+                  $ref: "#/components/schemas/PriceLimits"
+                sell:
+                  $ref: "#/components/schemas/PriceLimits"
+
+        traders:
+          type: array
+          minItems: 1
+          maxItems: 5
+          description: |
+            Trader configurations to follow.
+
+            Note: the backend rejects duplicate trader addresses.
+          items:
+            $ref: "#/components/schemas/TraderConfig"
+
+        excluded_markets:
+          type: array
+          minItems: 0
+          maxItems: 50
+          uniqueItems: true
+          description: Condition IDs to exclude from trading.
+          items:
+            $ref: "#/components/schemas/ConditionId"
+          default: []
+
+        is_aggregated:
+          type: boolean
+          default: true
+          description: If true, net exposure is aggregated by condition_id.
+
+        defer_execution:
+          type: object
+          additionalProperties: false
+          required: [enabled, hours_before_start]
+          properties:
+            enabled:
+              type: boolean
+              default: false
+            hours_before_start:
+              type: number
+              minimum: 0
+              maximum: 20000
+              default: 6
+              description: When enabled, filters events until within this many hours of start/end (rules depend on event type).
+
+    PriceLimits:
+      type: object
+      additionalProperties: false
+      required: [min, max]
+      properties:
+        min:
+          type: number
+          minimum: 0.01
+          maximum: 0.99
+          default: 0.01
+        max:
+          type: number
+          minimum: 0.01
+          maximum: 0.99
+          default: 0.99
+
+    TraderConfig:
+      type: object
+      additionalProperties: false
+      required: [address, factor, excluded_tags, min_share, max_share]
+      properties:
+        address:
+          $ref: "#/components/schemas/EvmAddress"
+        factor:
+          type: number
+          minimum: 0.0
+          maximum: 1000000.0
+          default: 1.0
+          description: Multiplier applied to the trader's balances.
+        excluded_tags:
+          type: array
+          minItems: 0
+          maxItems: 20
+          items:
+            type: integer
+            minimum: 0
+          default: []
+          description: Tag IDs to exclude for this trader.
+        min_share:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          default: 0
+        max_share:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          default: 100
+          description: |
+            Maximum share cap for this trader.
+
+            Note: the backend requires max_share > min_share.
+
+    CopyTradeResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/CopyTradeInstruction"
+
+    CopyTradeInstruction:
+      type: object
+      additionalProperties: false
+      required: [asset_id, size, side, target_price]
+      properties:
+        asset_id:
+          type: string
+          description: Polymarket asset/token id.
+        size:
+          type: integer
+          minimum: 1
+          description: Size (integer shares) to trade for this instruction.
+        side:
+          type: string
+          enum: ["BUY", "SELL"]
+        target_price:
+          type: number
+          minimum: 0.01
+          maximum: 0.99
+          description: Limit price to use for the order.
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
