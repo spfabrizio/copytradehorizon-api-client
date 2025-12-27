@@ -35,7 +35,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CopyTradeRequest"
+              $ref: "#/components/schemas/CopyTradeLambdaRequest"
             examples:
               basic:
                 summary: Basic example
@@ -66,7 +66,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CopyTradeResponse"
+                $ref: "#/components/schemas/CopyTradeLambdaResponse"
               examples:
                 empty:
                   summary: No instructions
@@ -113,6 +113,16 @@ paths:
                 forbidden:
                   value:
                     error: "Forbidden"
+        "429":
+          description: Too many requests (quota exceeded or throttled).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                quotaExceeded:
+                  value:
+                    error: "Too many requests"
         "500":
           description: Internal server error.
           content:
@@ -150,7 +160,7 @@ components:
       examples:
         - "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    CopyTradeRequest:
+    CopyTradeLambdaRequest:
       type: object
       additionalProperties: false
       required:
@@ -293,7 +303,7 @@ components:
 
             Note: the backend requires max_share > min_share.
 
-    CopyTradeResponse:
+    CopyTradeLambdaResponse:
       type: array
       items:
         $ref: "#/components/schemas/CopyTradeInstruction"

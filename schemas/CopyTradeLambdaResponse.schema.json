@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "CopyTradeLambdaResponseModel",
+    "type": "object",
+    "required": [
+        "asset_id", 
+        "size", 
+        "side", 
+        "target_price"
+    ],
+    "additionalProperties": false,
+    "properties": {
+
+
+        "asset_id": {
+            "type": "string",
+            "description": "Polymarket asset/token id."
+        },
+
+
+        "size": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Size (integer shares) to trade for this instruction."
+        },
+
+
+        "side": {
+            "type": "string",
+            "enum": ["BUY", "SELL"]
+        },
+
+
+        "target_price": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 0.99,
+            "description": "Limit price to use for the order."
+        }
+
+        
+    }
+}

@@ -1,0 +1,219 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "CopyTradeLambdaRequestModel",
+    "type": "object",
+    "required": [
+        "owner",
+        "price_configuration",
+        "traders",
+        "excluded_markets",
+        "is_aggregated",
+        "defer_execution"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        
+        
+        "owner": {
+            "type": "object",
+            "required": ["address", "is_autoredeem_enabled"],
+            "additionalProperties": false,
+            "properties": {
+                
+                "address": {
+                    "type": "string",
+                    "minLength": 42,
+                    "maxLength": 42,
+                    "pattern": "^0x[a-fA-F0-9]{40}$",
+                    "default": ""
+                },
+                
+                "is_autoredeem_enabled": {
+                    "type": "boolean",
+                    "default": false
+                }
+                
+            }
+        },
+        
+        
+        "price_configuration": {
+            "type": "object",
+            "required": ["spread", "buffer", "limits"],
+            "additionalProperties": false,
+            "properties": {
+                
+                "spread": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.05
+                },
+                
+                "buffer": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.05
+                },
+                
+                "limits": {
+                    "type": "object",
+                    "required": ["buy", "sell"],
+                    "additionalProperties": false,
+                    "properties": {
+                        
+                        "buy": {
+                            "type": "object",
+                            "required": ["min", "max"],
+                            "additionalProperties": false,
+                            "properties": {
+                                
+                                "min": {
+                                    "type": "number",
+                                    "minimum": 0.01,
+                                    "maximum": 0.99,
+                                    "default": 0.01
+                                },
+                                
+                                "max": {
+                                    "type": "number",
+                                    "minimum": 0.01,
+                                    "maximum": 0.99,
+                                    "default": 0.99
+                                }
+                                
+                            }
+                        },
+                        
+                        "sell": {
+                            "type": "object",
+                            "required": ["min", "max"],
+                            "additionalProperties": false,
+                            "properties": {
+                                
+                                "min": {
+                                    "type": "number",
+                                    "minimum": 0.01,
+                                    "maximum": 0.99,
+                                    "default": 0.01
+                                },
+                                
+                                "max": {
+                                    "type": "number",
+                                    "minimum": 0.01,
+                                    "maximum": 0.99,
+                                    "default": 0.99
+                                }
+                                
+                            }
+                        }
+                    }
+                }
+                
+            }
+        },
+        
+        "traders": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": {
+                "type": "object",
+                "required": ["address", "factor", "excluded_tags", "min_share", "max_share"],
+                "additionalProperties": false,
+                "properties": {
+                    
+                    "address": {
+                        "type": "string",
+                        "minLength": 42,
+                        "maxLength": 42,
+                        "pattern": "^0x[a-fA-F0-9]{40}$",
+                        "default": ""
+                    },
+                    
+                    "factor": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1000000.0,
+                        "default": 1.0
+                    },
+                    
+                    "excluded_tags": {
+                        "type": "array",
+                        "minItems": 0,
+                        "maxItems": 20,
+                        "items": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "default": []
+                    },
+                    
+                    "min_share": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000,
+                        "default": 0
+                    },
+                    
+                    "max_share": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000,
+                        "default": 100
+                    }
+                    
+                }
+            },
+            "default": []
+        },
+        
+        
+        "excluded_markets": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 50,
+            "uniqueItems": true,
+            "items": {
+                "type": "string",
+                "minLength": 66,
+                "maxLength": 66,
+                "pattern": "^0x[a-fA-F0-9]{64}$",
+                "default": ""
+            },
+            "default": []
+        },
+        
+        
+        "is_aggregated": {
+            "type": "boolean",
+            "default": true
+        },
+        
+        
+        "defer_execution": {
+            "type": "object",
+            "required": ["enabled", "hours_before_start"],
+            "additionalProperties": false,
+            "properties": {
+                
+                "enabled": {
+                    "type": "boolean",
+                    "default": false
+                },
+                
+                "hours_before_start": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 20000,
+                    "default": 6
+                }
+                
+            }
+        }
+        
+        
+    }
+}
