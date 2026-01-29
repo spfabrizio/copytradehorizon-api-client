@@ -144,10 +144,7 @@ If `true`, the API will merge/aggregate asset shares across traders (e.g., offse
 ### `defer_execution` (object)
 
 **Optional timing + execution policy to avoid trading too early and to control how you enter.**
-When enabled, the API can delay copying until closer to event start, and can optionally use a **LIMIT-then-MARKET** approach:
-- **LIMIT phase:** start working the order with a resting post-only GTC limit (more price control).
-- **MARKET phase:** near the cutoff, finish any remaining size to ensure you’re synced before the event.
-The API communicates the plan via `execution_style` and timestamps returned per instruction.
+When enabled, the API can delay copying until closer to event start, and can optionally use a LIMIT-then-MARKET approach: LIMIT phase: start working the order with a resting post-only GTC limit (more price control). MARKET phase: near the cutoff, finish any remaining size to ensure you’re synced before the event. The API communicates the plan via `execution_style` and timestamps returned per instruction.
 
 * **`defer_execution.enabled`** (boolean)  
     If `true`, the API may withhold instructions until the event is within the configured windows. If `false`, the API ignores the remaining fields and returns instructions immediately (subject to other filters).
