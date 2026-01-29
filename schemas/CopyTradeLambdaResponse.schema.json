@@ -17,6 +17,10 @@
             "description": "Polymarket asset/token id."
         },
 
+        "event_id": {
+            "type": "integer",
+            "description": "Polymarket event id."
+        },
 
         "size": {
             "type": "integer",
@@ -24,20 +28,53 @@
             "description": "Size (integer shares) to trade for this instruction."
         },
 
-
         "side": {
             "type": "string",
-            "enum": ["BUY", "SELL"]
+            "enum": ["BUY", "SELL"],
+            "description": "Determines to buy or sell shares."
         },
 
+        "price": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 0.99,
+            "description": "Best bid/ask price existing in the market."
+        },
 
         "target_price": {
             "type": "number",
             "minimum": 0.01,
             "maximum": 0.99,
             "description": "Limit price to use for the order."
-        }
+        },
 
+        "execution_style": {
+            "type": "string",
+            "enum": ["LIMIT", "MARKET"],
+            "description": "Order type to execute."
+        },
+
+        "limit_price": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 0.99,
+            "description": "Price at which limit is placed if execution style is LIMIT based on price offset."
+        },
+
+        "limit_start_ts": {
+            "type": "integer",
+            "description": "Time that the limit is placed if execution style is LIMIT."
+        },
+
+        "cutoff_ts": {
+            "type": "integer",
+            "description": "Time before the limit turns into a market order to match copied traders if execution style is LIMIT."
+        },
+
+        "event_time_ts": {
+            "type": "integer",
+            "description": "Time the event officially starts."
+        }
         
     }
 }

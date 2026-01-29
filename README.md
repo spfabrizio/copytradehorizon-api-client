@@ -58,8 +58,8 @@ curl -X POST "https://api.copytradehorizon.com/polymarketcopy" \
   -d '{
     "owner": { "address": "0x...", "is_autoredeem_enabled": false },
     "price_configuration": {
-      "spread": 0.05,
-      "buffer": 0.05,
+      "spread": 0.03,
+      "buffer": 0.03,
       "limits": { "buy": {"min": 0.01, "max": 0.98}, "sell": {"min": 0.01, "max": 0.98} }
     },
     "traders": [
@@ -67,7 +67,7 @@ curl -X POST "https://api.copytradehorizon.com/polymarketcopy" \
     ],
     "excluded_markets": [],
     "is_aggregated": true,
-    "defer_execution": { "enabled": true, "hours_before_start": 5.0 }
+    "defer_execution": { "enabled": true, "hours_before_start": 5.0, "mode": "LIMIT_THEN_MARKET", "limit_offset_price": 0.01, "limit_window_hours": 120.0 }
   }'
 ```
 
@@ -75,7 +75,7 @@ curl -X POST "https://api.copytradehorizon.com/polymarketcopy" \
 
 ```json
 [
-  { "asset_id": "123...", "size": 10, "side": "BUY", "target_price": 0.42 }
+  { "asset_id": "123...", "event_id": "123456", "size": 5, "side": "BUY", "price": 0.49, "target_price": 0.46, "execution_style": "MARKET", "limit_price": 0.48, "limit_start_ts": 1769284800, "cutoff_ts": 1769716440, "event_time_ts": 1769716800 }
 ]
 ```
 
@@ -143,36 +143,74 @@ If `true`, the API will merge/aggregate asset shares across traders (e.g., offse
 
 ### `defer_execution` (object)
 
-**A timing gate to avoid trading too early.** This lets you delay execution until closer to a market’s start time. This is very useful to avoid locking up capital. Best to use for sports markets. If the person you are copying purchases lots of shares for an event happening in 3 days, you have extra capital for trading until the date arrives when you defer execution. Does not work well for Esports markets based on how Polymarket notes their start time and will copy earlier for these markets than inputted.
+**Optional timing + execution policy to avoid trading too early and to control how you enter.**
+When enabled, the API can delay copying until closer to event start, and can optionally use a **LIMIT-then-MARKET** approach:
+- **LIMIT phase:** start working the order with a resting post-only GTC limit (more price control).
+- **MARKET phase:** near the cutoff, finish any remaining size to ensure you’re synced before the event.
+The API communicates the plan via `execution_style` and timestamps returned per instruction.
 
-* **`defer_execution.enabled`** (boolean)
-    If `true`, the system will not generate trades for markets that are still too far from their start time (based on the setting below). If `false`, the system will copy all events irrespective of their start time and ignore values in `hours_before_start` field.
+* **`defer_execution.enabled`** (boolean)  
+    If `true`, the API may withhold instructions until the event is within the configured windows. If `false`, the API ignores the remaining fields and returns instructions immediately (subject to other filters).
 
-* **`defer_execution.hours_before_start`** (number)
-    If deferral is enabled, trades are only allowed when the market is within this many hours of starting. Example: if `hours_before_start` is `5`, the system waits until the market is less than or equal to 5 hours from start before allowing copy-trade instructions.
+* **`defer_execution.hours_before_start`** (number)  
+    The “finalization window.” Once the event is within this many hours of start, the API can switch to returning `execution_style: "MARKET"` instructions (to finish remaining size before start).
+
+* **`defer_execution.mode`** (string)  
+    Execution strategy when deferral is enabled. Supported values: `LIMIT_THEN_MARKET`: return `LIMIT` instructions during the limit window, then `MARKET` instructions near cutoff to finish remainder.
+
+* **`defer_execution.limit_window_hours`** (number)  
+    How early the API is allowed to start returning `execution_style: "LIMIT"` instructions before event start.  Outside this window (too early), the API may return no instructions for that market.
+
+* **`defer_execution.limit_offset_price`** (number)  
+    A price offset applied by the server when computing `limit_price` during the LIMIT phase. The server returns the final `limit_price` in the response; clients should treat it as the authoritative limit level.
 
 ## Response Field Explanation
 
 The response body is an array of trade instructions. It can be empty.
 
 * `[]` means “no trades needed right now” (your current positions already match the target portfolio within tolerance, or all potential trades were filtered out by your settings).
-* If the array is not empty, each element is a `CopyTradeInstruction` object describing one limit order you should place. This object is represented as `CopyTradeLambdaResponse` object in the schemas folder.
+* If the array is not empty, each element is a `CopyTradeInstruction` describing one action to take.
+Depending on `defer_execution`, an instruction may be:
+- `execution_style: "LIMIT"` — place/maintain a resting limit order (often post-only GTC).
+- `execution_style: "MARKET"` — place an order intended to fill immediately (or as close as possible) to sync remaining exposure near cutoff.
 
 ### `CopyTradeInstruction` (object)
 
 **Calculated trade to move your portfolio toward the target allocation.** Each instruction is independent and can be executed in order.
 
 * **`asset_id`** (string)
-    The Polymarket asset/token ID to trade. This identifies the specific outcome token (e.g., a YES token or NO token to a particular market) that the instruction applies to.
+    Outcome token id to trade.
 
-* **`size`** (integer)
-    The number of shares to buy or sell for this instruction. This is always a whole number of shares and represents the suggested trade size after applying your scaling rules (factor, min/max shares) and any aggregation logic.
+* **`event_id`** (string)
+    Polymarket event identifier for the market this instruction belongs to.
 
 * **`side`** (`BUY` | `SELL`)
-    Whether you should buy shares (`BUY`) or sell shares (`SELL`) for the given `asset_id`. This is the action needed to move your current position toward the target position.
+    Direction of the trade.
+
+* **`size`** (integer)
+    Total intended size for this instruction (in shares). Your client should typically treat this as the “desired” amount and may compute remaining based on fills/current positions.
+
+* **`execution_style`** (`LIMIT` | `MARKET`)
+    How the client should execute this instruction at the current time: `LIMIT`: use `limit_price` and maintain/cancel/reprice as needed until `cutoff_ts`. MARKET`: use `target_price` and finish remaining size (often after canceling any open limits).
 
 * **`target_price`** (number)
-    he limit price you should use for the order. This will always be bounded to valid probability-style prices and is influenced by your `price_configuration` rules (buffer and limits). A higher buy price or lower sell price generally increases fill probability, but can worsen execution quality.
+    The server-computed execution price level for the instruction (used for MARKET-style execution, and may also serve as a reference anchor for LIMIT pricing).
+
+* **`limit_price`** (number, optional)
+    Present when `execution_style` is `LIMIT`. The exact limit price the client should place/maintain.
+
+* **`price`** (number, optional)
+    Informational price snapshot used during calculation (useful for debugging/logging).
+
+* **`limit_start_ts`** (integer, unix seconds, optional)
+    Earliest timestamp when the LIMIT phase is intended to begin for this instruction.
+
+* **`cutoff_ts`** (integer, unix seconds, optional)
+    Timestamp after which the client should stop maintaining LIMIT orders and switch to MARKET (finish remaining), if the server returns MARKET instructions.
+
+* **`event_time_ts`** (integer, unix seconds, optional)
+    The event start time used for defer-execution logic.
+
 
 ## Schemas
 
@@ -232,6 +270,7 @@ What you need to set in `.env`:
 
 * `CTH_KEY` - your CopyTradeHorizon API key (request by email).
 * `FUNDER` - the EVM address that will be treated as your “owner” wallet in the request (your execution portfolio).
+* `STATE_FILE` (optional) - path to persistent defer-execution state JSON (default `defer_state.json`).
 * (Optional for the request-only example) `HOST`, `PRIVATE_KEY`, `CHAIN_ID` - only required for the full bot that actually places orders.
 
 What the request script is doing:
@@ -259,20 +298,39 @@ Review of the request (`payload`), look at other sections, schemas, and openapi 
 
 #### Full bot (places orders)
 
-The bot example runs continuously: it polls the CopyTradeHorizon API for instructions, then places limit orders on Polymarket via `py-clob-client`.
+The bot example runs continuously: it polls the CopyTradeHorizon API for **execution-style instructions** and then manages Polymarket orders accordingly via `py-clob-client`. It supports a two-phase flow when `defer_execution.mode = "LIMIT_THEN_MARKET"`:
+
+- **LIMIT phase:** place/maintain a post-only GTC limit order and reprice/resize as the server updates pricing or as fills occur.
+- **MARKET phase:** near/after cutoff, cancel resting limits and finish any remaining size with short-lived (GTD) orders so your portfolio is synced before the event.
 
 High-level flow:
 
-1. Fetch your **current on-chain positions** from Polymarket (`data-api.polymarket.com/positions`).
-2. Call the CopyTradeHorizon API to get the **recommended instructions**.
-3. Convert instructions into `OrderArgs` (token, side, size, limit price).
-4. Post orders to the Polymarket CLOB.
-5. Track “pending targets” so the bot does not spam repeat orders for the same asset while fills/settlement catch up.
+1. Fetch your **current on-chain positions** from Polymarket (`data-api.polymarket.com/positions`) at the start of every poll.
+2. Clear any assets that have **synced** after recent MARKET orders (if `abs(chain_position - pending_target) <= SYNC_EPS`), so they’re no longer blocked.
+3. Call the CopyTradeHorizon API to get the **recommended instructions**, including `execution_style`, `limit_price`, `target_price`, and timing fields like `cutoff_ts`.
+4. Drop stale intents: if an `asset_id` is no longer returned by the API, cancel any open orders for that asset and remove its entry from the persistent defer state.
+5. Process **LIMIT instructions** (`execution_style == "LIMIT"`):
+   - Skip assets currently blocked by the MARKET sync guard (`pending_targets`).
+   - If the intent changed (side/desired size/cutoff changed), cancel existing open orders and reset an intent anchored to the **current chain position** (`base_pos`).
+   - Compute **remaining size** using actual positions: progress is measured from `base_pos` (BUY: position increase; SELL: position decrease).
+   - Cancel wrong-side orders, keep only one newest same-side order, and cancel extras.
+   - Reprice/resize if needed (threshold-based) by canceling and re-posting a post-only GTC limit order.
+   - Persist per-asset intent in `defer_state` (order id, side, desired size, base position, last limit price, cutoff timestamp).
+6. Process **MARKET instructions** (`execution_style == "MARKET"`):
+   - Skip assets blocked by the MARKET sync guard.
+   - Cancel **all** open orders for the asset (covers restarts and prior LIMIT orders).
+   - Compute **remaining size** using actual positions; if transitioning from LIMIT → MARKET for the same intent, reuse the stored `base_pos`.
+   - Post short-lived GTD orders in small batches; record successful deltas and set a **pending target position** for each asset so the bot doesn’t repeat MARKET orders until positions update.
+   - Remove any `defer_state` for the asset once it enters MARKET phase.
+7. Save `defer_state` to disk every loop and on shutdown (SIGINT/SIGTERM/exit) so LIMIT intents survive restarts.
 
 Key settings in the bot:
 
 * `POLL_INTERVAL` - how often the bot checks for new instructions.
-* `SYNC_EPS` - tolerance used to decide when your current position is “close enough” to the expected target after recent orders, so the bot doesn’t re-issue trades too aggressively.
+* `SYNC_EPS` - tolerance for considering a MARKET order “synced” (prevents repeating MARKET orders before positions update).
+* `STATE_FILE` - path to the persistent defer-execution state JSON (default: `defer_state.json`).
+* `LIMIT_REPRICE_THRESHOLD` - minimum price change needed to cancel/repost a LIMIT order.
+* `SIZE_EPS` - tolerance for detecting meaningful size changes (used for intent changes and order resize decisions).
 
 Environment variables required for the full bot:
 
@@ -281,6 +339,7 @@ Environment variables required for the full bot:
 * `HOST` - Polymarket CLOB host (example: `https://clob.polymarket.com`).
 * `PRIVATE_KEY` - private key for the wallet used to sign orders (keep this secret; never commit it).
 * `CHAIN_ID` - chain id (e.g., 137 for Polygon).
+* `STATE_FILE` (optional) - override the default location/name for the persistent defer-execution state file.
 
 ### Running the bot 24/7
 

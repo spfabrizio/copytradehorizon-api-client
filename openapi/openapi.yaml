@@ -238,7 +238,7 @@ components:
         defer_execution:
           type: object
           additionalProperties: false
-          required: [enabled, hours_before_start]
+          required: [enabled, hours_before_start, mode, limit_offset_price, limit_window_hours]
           properties:
             enabled:
               type: boolean
@@ -248,7 +248,24 @@ components:
               minimum: 0
               maximum: 20000
               default: 6
-              description: When enabled, filters events until within this many hours of start/end (rules depend on event type).
+              description: When enabled, filters events until within this many hours of start/end (rules depend on event type). If LIMIT_THEN_MARKET on, market purchases at this amount of hours before event.
+            mode:
+              type: string
+              enum: ["LIMIT_THEN_MARKET", "FILTER"]
+              default: FILTER
+              description: If FILTER then ignores limit_offset_price and limit_window_hours values and copies with market orders. If LIMIT_THEN_MARKET places limit orders for copying positions at set time intervals.
+            limit_offset_price:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.01
+              description: Places limit orders by the specified number of cents away from the best bid/ask to be filled.
+            limit_window_hours:
+              type: number
+              minimum: 0
+              maximum: 20000
+              default: 24
+              description: Amount of hours before an event starts to place initial limit orders.
 
     PriceLimits:
       type: object
@@ -316,6 +333,9 @@ components:
         asset_id:
           type: string
           description: Polymarket asset/token id.
+        event_id:
+          type: integer
+          description: Polymarket event id.
         size:
           type: integer
           minimum: 1
@@ -323,11 +343,35 @@ components:
         side:
           type: string
           enum: ["BUY", "SELL"]
+          description: Determines to buy or sell shares.
+        price:
+          type: number
+          minimum: 0.01
+          maximum: 0.99
+          description: Best bid/ask price existing in the market.
         target_price:
           type: number
           minimum: 0.01
           maximum: 0.99
           description: Limit price to use for the order.
+        execution_style:
+          type: string,
+          enum: ["LIMIT", "MARKET"],
+          description: Order type to execute.
+        limit_price:
+          type": number,
+          minimum": 0.01,
+          maximum": 0.99,
+          description": Price at which limit is placed if execution style is LIMIT based on price offset.
+        limit_start_ts:
+          type": integer,
+          description: Time that the limit is placed if execution style is LIMIT.
+        cutoff_ts:
+          type: integer
+          description: Time before the limit turns into a market order to match copied traders if execution style is LIMIT.
+        event_time_ts:
+          type: integer
+          description: Time the event officially starts.
 
     ErrorResponse:
       type: object

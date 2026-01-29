@@ -50,6 +50,9 @@ payload = {
     "defer_execution": {
         "enabled": True,
         "hours_before_start": 5.0,
+        "mode": "LIMIT_THEN_MARKET",
+        "limit_offset_price": 0.01,
+        "limit_window_hours": 24.0, 
     },
 }
 
